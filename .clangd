@@ -1,0 +1,20 @@
+CompileFlags:
+  # Fuerza a clangd a tratar los archivos como C plano
+  Add: [
+    "-xc",
+    "-D__extension__=",
+    "-D__attribute__(x)=",
+    "-D_GNU_SOURCE"
+  ]
+  Remove: [
+    -fno-tree-switch-conversion,
+    -fstrict-volatile-bitfields,
+    -mlongcalls,
+    -fno-shrink-wrap,
+    -mfpu=*,
+    -target=*,
+    -m*
+  ]
+
+Diagnostics:
+  Suppress: "*"

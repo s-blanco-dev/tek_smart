@@ -5,11 +5,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
+#include <stdint.h>
+#include <string.h>
 
-#define UART_TX_PIN 21
-#define UART_RX_PIN 20
-#define UART_NUM UART_NUM_0
-#define MAX_LINE_LEN 8
+#define UART_TX_PIN 6
+#define UART_RX_PIN 7
+#define UART_NUM UART_NUM_1
+#define UART_BUF_SIZE 1024
 
 static const char *TAG = "UART_HANDLER";
 
@@ -25,40 +27,30 @@ void uart_init(void) {
 
   ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
 
-  const int uart_buffer_size = (1024 * 2);
-  ESP_ERROR_CHECK(uart_driver_install(UART_NUM, uart_buffer_size,
-                                      uart_buffer_size, 10, NULL, 0));
-  ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_RX_PIN, UART_TX_PIN));
+  ESP_ERROR_CHECK(
+      uart_driver_install(UART_NUM, UART_BUF_SIZE, UART_BUF_SIZE, 10, NULL, 0));
+  ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN,
+                               UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
   ESP_LOGI(TAG, "UART initialized");
 }
 
-void uart_task_init(void *pvParameters) {
-  uart_init();
+void tek_checkhealth(void) {
+  uart_flush_input(UART_NUM);
 
-  char line[MAX_LINE_LEN];
-  int pos = 0;
+  const char *cmd = "ID?";
+  uart_write_bytes(UART_NUM, cmd, strlen(cmd));
+  ESP_LOGI(TAG, "SENT %s", cmd);
 
-  while (1) {
-    uint8_t byte;
+  uint8_t data[UART_BUF_SIZE];
+  int len =
+      uart_read_bytes(UART_NUM, data, UART_BUF_SIZE - 1, pdMS_TO_TICKS(1000));
 
-    // uso delay maximo para bloquear (se mide en RTOS ticks)
-    int n = uart_read_bytes(UART_NUM, &byte, 1, 0xffffffff);
-
-    if (n <= 0) {
-      continue;
-    }
-
-    if (byte == '\n' || byte == '\r') {
-      // si tengo un \n o \r y la posicion es 0, entonces estoy en una linea
-      // vacia la skipeo
-      if (pos == 0) {
-        continue;
-      }
-
-      // si tengo un \n o \r y la posicion NO es 0, entonces estoy en el ultimo
-      // caracter agrego el null terminator y reseteo la posicion a 0
-      line[pos] = '\0';
-      pos = 0;
-    }
+  if (len > 0) {
+    data[len] = '\0'; 
+    ESP_LOGI(TAG, "RECEIVED (%d bytes): %s", len, data);
+  } else {
+    ESP_LOGE(TAG, "NO RESPONSE FROM DEVICE (Timeout).");
   }
 }
+
+void uart_task_init(void *pvParameters) { uart_init(); }
