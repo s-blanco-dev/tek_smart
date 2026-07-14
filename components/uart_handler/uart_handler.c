@@ -7,6 +7,8 @@
 #include "freertos/projdefs.h"
 #include <stdint.h>
 #include <string.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define UART_TX_PIN 6
 #define UART_RX_PIN 7
@@ -51,6 +53,35 @@ void tek_checkhealth(void) {
   } else {
     ESP_LOGE(TAG, "NO RESPONSE FROM DEVICE (Timeout).");
   }
+}
+
+void uart_send_command(char* cmd, int delay_ms) {
+  uart_flush_input(UART_NUM);
+
+  uart_write_bytes(UART_NUM, cmd, strlen(cmd));
+  ESP_LOGI(TAG, "SENT %s", cmd);
+
+  uint8_t data[UART_BUF_SIZE];
+  int len =
+      uart_read_bytes(UART_NUM, data, UART_BUF_SIZE - 1, pdMS_TO_TICKS(delay_ms));
+
+  if (len > 0) {
+    data[len] = '\0'; 
+    ESP_LOGI(TAG, "RECEIVED (%d bytes): %s", len, data);
+  } else {
+    ESP_LOGE(TAG, "NO RESPONSE FROM DEVICE (Timeout).");
+  }
+}
+
+
+// wrapper
+int uart_read(uint8_t *byte) {
+    return uart_read_bytes(UART_NUM, byte, 1, portMAX_DELAY);
+}
+
+// wrapper
+int uart_write(void *msg, size_t size) {
+    return uart_write_bytes(UART_NUM, msg, size);
 }
 
 void uart_task_init(void *pvParameters) { uart_init(); }
