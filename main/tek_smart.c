@@ -14,6 +14,7 @@ const char *TAG = "TEK_SMART";
 void the_callback(const char *topic, int topic_len, char *data, int data_len) {
   ESP_LOGI(TAG, "Got message in: %.*s", topic_len, topic);
   ESP_LOGI(TAG, "MESSAGE: %.*s", data_len, data);
+  tek_checkhealth();
   uart_send_command(data, 1000);
 }
 
@@ -63,5 +64,5 @@ static void app_network_init(void) {
 void app_main(void) {
   app_network_init();
   uart_init();
-  // tek_checkhealth();
+  tek_checkhealth();
 }
