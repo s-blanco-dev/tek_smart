@@ -4,6 +4,7 @@
 #include "http_handler.h"
 #include "mqtt_handler.h"
 #include "nvs.h"
+#include "soc/clk_tree_defs.h"
 #include "uart_handler.h"
 #include "wifi_manager.h"
 #include <stdio.h>
@@ -14,9 +15,19 @@ const char *TAG = "TEK_SMART";
 
 void the_callback(const char *topic, int topic_len, char *data, int data_len) {
   ESP_LOGI(TAG, "Got message in: %.*s", topic_len, topic);
-  ESP_LOGI(TAG, "MESSAGE: %.*s", data_len, data);
-  tek_checkhealth();
-  uart_send_command(data);
+
+  // 1. Crear un buffer seguro para terminar la cadena de MQTT en '\0'
+  char safe_cmd[128];
+  if (data_len >= sizeof(safe_cmd)) {
+    data_len = sizeof(safe_cmd) - 1;
+  }
+  memcpy(safe_cmd, data, data_len);
+  safe_cmd[data_len] = '\0'; // Asegurar el terminador nulo
+
+  ESP_LOGI(TAG, "Processing safe command: %s", safe_cmd);
+
+  // 2. Enviar SOLAMENTE el comando de MQTT (sin encadenar tek_checkhealth)
+  uart_send_command(safe_cmd);
 }
 
 void receive_callback(char *msg) {
@@ -74,6 +85,7 @@ void app_main(void) {
                                .data_bits = UART_DATA_8_BITS,
                                .parity = UART_PARITY_DISABLE,
                                .stop_bits = UART_STOP_BITS_1,
+                               .source_clk = UART_SCLK_DEFAULT,
                                .flow_ctrl = UART_HW_FLOWCTRL_DISABLE};
 
   uart_handler_config_t handler_config = {
@@ -83,7 +95,9 @@ void app_main(void) {
 
   set_uart_handler_config(&handler_config);
   uart_init();
-  // tek_checkhealth();
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  tek_checkhealth();
   while (1) {
     // Tu loop principal puede hacer otras cosas aquí (atender Wi-Fi, MQTT, LED
     // status) sin preocuparse por quedarse colgado esperando por la UART.
