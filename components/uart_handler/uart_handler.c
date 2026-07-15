@@ -5,33 +5,66 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
+#include "hal/uart_types.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #define UART_TX_PIN 6
 #define UART_RX_PIN 7
-#define UART_NUM UART_NUM_1
 #define UART_BUF_SIZE 1024
 
+#define RX_TEMP_BUF_SIZE 256
+#define RX_ACCUM_BUF_SIZE 4096 // to save CURVE? response
+
+static const uart_port_t UART_NUM = UART_NUM_1;
 static const char *TAG = "UART_HANDLER";
+static uart_handler_config_t config;
+
+static uint8_t rx_accum_buf[RX_ACCUM_BUF_SIZE];
+static size_t rx_accum_len = 0;
+
+static void uart_rx_task(void *pvParameters) {
+  uint8_t tmp_buf[RX_TEMP_BUF_SIZE];
+  ESP_LOGI(TAG, "UART RX Task started");
+
+  while (1) {
+    int len = uart_read_bytes(UART_NUM, tmp_buf, sizeof(tmp_buf) - 1,
+                              pdMS_TO_TICKS(100));
+
+    if (len > 0) {
+      if (rx_accum_len + len < RX_ACCUM_BUF_SIZE - 1) {
+        memcpy(&rx_accum_buf[rx_accum_len], tmp_buf, len);
+        rx_accum_len += len;
+      } else {
+        ESP_LOGE(TAG, "Accumulator buffer overflow!");
+        rx_accum_len = 0; // in case I die
+      }
+    } else {
+      if (rx_accum_len > 0) {
+        rx_accum_buf[rx_accum_len] = '\0';
+
+        ESP_LOGI(TAG, "RESPONSE RECEIVED (%d bytes):", rx_accum_len);
+
+        config.receive_callback((char*)rx_accum_buf); // callback uuuu
+
+        rx_accum_len = 0;
+      }
+    }
+  }
+}
 
 void uart_init(void) {
-  uart_config_t uart_config = {
-      .baud_rate = 9600,
-      .data_bits = UART_DATA_8_BITS,
-      .parity = UART_PARITY_DISABLE,
-      .stop_bits = UART_STOP_BITS_1,
-      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-      .rx_flow_ctrl_thresh = 122,
-  };
+  uart_config_t uart_config = config.uart_config;
 
   ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
 
-  ESP_ERROR_CHECK(
-      uart_driver_install(UART_NUM, UART_BUF_SIZE, UART_BUF_SIZE, 10, NULL, 0));
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN,
                                UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(
+      uart_driver_install(UART_NUM, 2048, UART_BUF_SIZE, 0, NULL, 0));
+
+  xTaskCreate(uart_rx_task, "uart_rx_task", 4096, NULL, 10, NULL);
   ESP_LOGI(TAG, "UART initialized");
 }
 
@@ -41,17 +74,6 @@ void tek_checkhealth(void) {
   const char *cmd = "ID?\n";
   uart_write_bytes(UART_NUM, cmd, strlen(cmd));
   ESP_LOGI(TAG, "SENT %s", cmd);
-
-  uint8_t data[UART_BUF_SIZE];
-  int len =
-      uart_read_bytes(UART_NUM, data, UART_BUF_SIZE - 1, pdMS_TO_TICKS(1000));
-
-  if (len > 0) {
-    data[len] = '\0';
-    ESP_LOGI(TAG, "RECEIVED (%d bytes): %s", len, data);
-  } else {
-    ESP_LOGE(TAG, "NO RESPONSE FROM DEVICE (Timeout).");
-  }
 }
 
 // wrapper
@@ -79,38 +101,16 @@ void uart_write(const char *data, size_t len) {
   ESP_LOGI(TAG, "SENT TO TEK (%d bytes): %.*s", (int)len, (int)len, buf);
 
   // 3. Formatear terminadores SCPI obligatorios para Tektronix
-  buf[len]     = '\r';
+  buf[len] = '\r';
   buf[len + 1] = '\n';
 
   // 4. Enviar los bytes exactos por el puerto serie
   uart_write_bytes(UART_NUM, buf, len + 2);
 }
 
-void uart_send_scpi_cmd(const char *cmd, size_t len) {
-  char buf[UART_BUF_SIZE];
-
-  // Copiar el comando y asegurar que termine en \r\n\0
-  int formatted_len = snprintf(buf, sizeof(buf), "%.*s\n", (int)len, cmd);
-
-  ESP_LOGI(TAG, "SENT TO TEK: %s", buf);
-  uart_write_bytes(UART_NUM, buf, formatted_len);
-}
-
-void uart_send_command(char *cmd, int delay_ms) {
+void uart_send_command(char *cmd) {
   uart_flush_input(UART_NUM);
-
   uart_write(cmd, strlen(cmd));
-
-  uint8_t data[UART_BUF_SIZE];
-  int len = uart_read_bytes(UART_NUM, data, UART_BUF_SIZE - 1,
-                            pdMS_TO_TICKS(1000));
-
-  if (len > 0) {
-    data[len] = '\0';
-    ESP_LOGI(TAG, "RECEIVED (%d bytes): %s", len, data);
-  } else {
-    ESP_LOGE(TAG, "NO RESPONSE FROM DEVICE (Timeout).");
-  }
 }
 
-void uart_task_init(void *pvParameters) { uart_init(); }
+void set_uart_handler_config(uart_handler_config_t conf){config = conf;}

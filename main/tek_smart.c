@@ -1,3 +1,4 @@
+#include "driver/uart.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "http_handler.h"
@@ -15,7 +16,12 @@ void the_callback(const char *topic, int topic_len, char *data, int data_len) {
   ESP_LOGI(TAG, "Got message in: %.*s", topic_len, topic);
   ESP_LOGI(TAG, "MESSAGE: %.*s", data_len, data);
   tek_checkhealth();
-  uart_send_command(data, 1000);
+  uart_send_command(data);
+}
+
+void receive_callback(char* msg) {
+  ESP_LOGI(TAG, "Got TEK Ressponse: %s", msg);
+  mqtt_publish("tek/response", msg, 2, 0);
 }
 
 mqtt_config_t config = {
@@ -65,4 +71,19 @@ void app_main(void) {
   app_network_init();
   uart_init();
   tek_checkhealth();
+
+	uart_config_t uart_config = {
+		.baud_rate = 19200,
+		.data_bits = UART_DATA_8_BITS,
+		.parity = UART_PARITY_DISABLE,
+		.stop_bits = UART_STOP_BITS_1,
+		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+	};
+
+  uart_handler_config_t handler_config = {
+    .uart_config = uart_config,
+    .receive_callback = receive_callback,
+};
+
+  set_uart_handler_config(handler_config);
 }

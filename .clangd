@@ -8,6 +8,8 @@ CompileFlags:
   ]
   Remove: [
     -fno-tree-switch-conversion,
+    -fno-malloc-dce,
+    -fzero-init-padding-bits=*,
     -fstrict-volatile-bitfields,
     -mlongcalls,
     -fno-shrink-wrap,
