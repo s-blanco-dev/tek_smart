@@ -19,7 +19,7 @@ void the_callback(const char *topic, int topic_len, char *data, int data_len) {
   uart_send_command(data);
 }
 
-void receive_callback(char* msg) {
+void receive_callback(char *msg) {
   ESP_LOGI(TAG, "Got TEK Ressponse: %s", msg);
   mqtt_publish("tek/response", msg, 2, 0);
 }
@@ -69,21 +69,24 @@ static void app_network_init(void) {
 
 void app_main(void) {
   app_network_init();
-  uart_init();
-  tek_checkhealth();
 
-	uart_config_t uart_config = {
-		.baud_rate = 19200,
-		.data_bits = UART_DATA_8_BITS,
-		.parity = UART_PARITY_DISABLE,
-		.stop_bits = UART_STOP_BITS_1,
-		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-	};
+  uart_config_t uart_config = {.baud_rate = 19200,
+                               .data_bits = UART_DATA_8_BITS,
+                               .parity = UART_PARITY_DISABLE,
+                               .stop_bits = UART_STOP_BITS_1,
+                               .flow_ctrl = UART_HW_FLOWCTRL_DISABLE};
 
   uart_handler_config_t handler_config = {
-    .uart_config = uart_config,
-    .receive_callback = receive_callback,
-};
+      .uart_config = &uart_config,
+      .receive_callback = receive_callback,
+  };
 
-  set_uart_handler_config(handler_config);
+  set_uart_handler_config(&handler_config);
+  uart_init();
+  // tek_checkhealth();
+  while (1) {
+    // Tu loop principal puede hacer otras cosas aquí (atender Wi-Fi, MQTT, LED
+    // status) sin preocuparse por quedarse colgado esperando por la UART.
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
 }

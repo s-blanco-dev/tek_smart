@@ -16,10 +16,10 @@ typedef void (*uart_on_data_receive)(char* msg);
 void uart_set_receive_callback(void (*func)(char* msg));
 
 typedef struct uart_handler_config_s {
-  uart_config_t uart_config;
+  uart_config_t *uart_config;
   uart_on_data_receive receive_callback;
 } uart_handler_config_t;
 
-void set_uart_handler_config(uart_handler_config_t config);
+void set_uart_handler_config(uart_handler_config_t *config);
 
 #endif // !UART_HANDLER

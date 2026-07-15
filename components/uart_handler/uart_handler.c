@@ -19,7 +19,8 @@
 
 static const uart_port_t UART_NUM = UART_NUM_1;
 static const char *TAG = "UART_HANDLER";
-static uart_handler_config_t config;
+static uart_config_t g_uart_config;
+static uart_on_data_receive g_receive_callback = NULL;
 
 static uint8_t rx_accum_buf[RX_ACCUM_BUF_SIZE];
 static size_t rx_accum_len = 0;
@@ -46,7 +47,9 @@ static void uart_rx_task(void *pvParameters) {
 
         ESP_LOGI(TAG, "RESPONSE RECEIVED (%d bytes):", rx_accum_len);
 
-        config.receive_callback((char*)rx_accum_buf); // callback uuuu
+        if (g_receive_callback != NULL) {
+          g_receive_callback((char *)rx_accum_buf); // callback uuuu
+        }
 
         rx_accum_len = 0;
       }
@@ -55,9 +58,7 @@ static void uart_rx_task(void *pvParameters) {
 }
 
 void uart_init(void) {
-  uart_config_t uart_config = config.uart_config;
-
-  ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
+  ESP_ERROR_CHECK(uart_param_config(UART_NUM, &g_uart_config));
 
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN,
                                UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
@@ -69,11 +70,7 @@ void uart_init(void) {
 }
 
 void tek_checkhealth(void) {
-  uart_flush_input(UART_NUM);
-
-  const char *cmd = "ID?\n";
-  uart_write_bytes(UART_NUM, cmd, strlen(cmd));
-  ESP_LOGI(TAG, "SENT %s", cmd);
+  uart_send_command("ID?");
 }
 
 // wrapper
@@ -109,8 +106,26 @@ void uart_write(const char *data, size_t len) {
 }
 
 void uart_send_command(char *cmd) {
+  if (cmd == NULL) {
+    return;
+  }
   uart_flush_input(UART_NUM);
   uart_write(cmd, strlen(cmd));
 }
 
-void set_uart_handler_config(uart_handler_config_t conf){config = conf;}
+void set_uart_handler_config(uart_handler_config_t *config) {
+  if (config == NULL)
+    return;
+
+  if (config->uart_config != NULL) {
+    g_uart_config = *(config->uart_config);
+  }
+
+  if (config->receive_callback != NULL) {
+    g_receive_callback = config->receive_callback;
+  }
+}
+
+void uart_set_receive_callback(void (*func)(char *msg)) {
+  g_receive_callback = func;
+}
